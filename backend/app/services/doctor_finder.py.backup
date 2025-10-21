@@ -1,0 +1,900 @@
+"""
+Doctor Finder Service
+Handles geocoding, doctor search, and location-based recommendations
+Integrates with external API for real-time doctor data
+"""
+import logging
+import math
+import random
+import os
+from datetime import datetime
+from typing import List, Dict, Tuple, Optional
+
+from app.schemas.doctors import (
+    DoctorSearchRequest,
+    DoctorSearchResponse,
+    Doctor,
+    DoctorLocation
+)
+from app.services.external_doctor_api import ExternalDoctorAPIService
+
+logger = logging.getLogger(__name__)
+
+# Debug: Check if external API will be enabled
+_use_external_api = os.getenv("USE_EXTERNAL_DOCTOR_API", "false").lower() == "true"
+logger.info(f"Module loaded - USE_EXTERNAL_DOCTOR_API={_use_external_api}")
+
+
+class DoctorFinderService:
+    """Service for finding doctors based on location and specialization"""
+    
+    def __init__(self):
+        """Initialize the doctor finder service"""
+        try:
+            logger.info("DoctorFinderService __init__ starting...")
+            self.external_api = ExternalDoctorAPIService()
+            logger.info("ExternalDoctorAPIService created")
+            self.use_external_api = os.getenv("USE_EXTERNAL_DOCTOR_API", "false").lower() == "true"
+            logger.info(f"use_external_api set to: {self.use_external_api}")
+            
+            if self.use_external_api:
+                logger.info("External Doctor API integration enabled")
+            else:
+                logger.info("Using local sample doctor data")
+        except Exception as e:
+            logger.error(f"Error in DoctorFinderService __init__: {e}", exc_info=True)
+            # Set defaults on error
+            self.external_api = None
+            self.use_external_api = False
+    
+    
+    # ZIP code to coordinates mapping for USA (for future geocoding if needed)
+    # Currently not used - NPPES API provides location data
+    PINCODE_COORDINATES = {}
+    
+    # Sample doctors removed - using external NPPES API for real USA doctor data
+    SAMPLE_DOCTORS = []
+    
+    def geocode_pincode(self, pincode: str) -> Optional[Tuple[float, float, str, str]]:
+        """
+        Convert PIN code to geographic coordinates
+        
+        Args:
+            pincode: Postal/PIN code
+            
+        Returns:
+            Tuple of (latitude, longitude, city, state) or None if not found
+        """
+        # Geocoding removed - NPPES API provides location data directly
+        return self.PINCODE_COORDINATES.get(pincode)
+        "560002": (12.9762, 77.6033, "Bangalore", "Karnataka"),
+        "560003": (12.9698, 77.6451, "Bangalore", "Karnataka"),
+        "560004": (12.9539, 77.5937, "Bangalore", "Karnataka"),
+        "560005": (13.0103, 77.5980, "Bangalore", "Karnataka"),
+        "560010": (12.9698, 77.6040, "Bangalore", "Karnataka"),
+        "560016": (13.0127, 77.5500, "Bangalore", "Karnataka"),
+        "560017": (13.0199, 77.6350, "Bangalore", "Karnataka"),
+        "560025": (12.9850, 77.6064, "Bangalore", "Karnataka"),
+        "560034": (13.0358, 77.5970, "Bangalore", "Karnataka"),
+        "560038": (13.0288, 77.6515, "Bangalore", "Karnataka"),
+        "560066": (12.9716, 77.6412, "Bangalore", "Karnataka"),
+        "560068": (13.0569, 77.6416, "Bangalore", "Karnataka"),
+        
+        # Mumbai
+        "400001": (18.9388, 72.8354, "Mumbai", "Maharashtra"),
+        "400002": (18.9575, 72.8113, "Mumbai", "Maharashtra"),
+        "400003": (18.9583, 72.8300, "Mumbai", "Maharashtra"),
+        "400004": (18.9520, 72.8337, "Mumbai", "Maharashtra"),
+        "400005": (18.9450, 72.8258, "Mumbai", "Maharashtra"),
+        "400012": (18.9894, 72.8360, "Mumbai", "Maharashtra"),
+        "400013": (19.0330, 72.8569, "Mumbai", "Maharashtra"),
+        "400018": (18.9520, 72.8337, "Mumbai", "Maharashtra"),
+        "400020": (19.0176, 72.8562, "Mumbai", "Maharashtra"),
+        "400026": (19.0330, 72.8430, "Mumbai", "Maharashtra"),
+        "400050": (19.0596, 72.8295, "Mumbai", "Maharashtra"),
+        "400051": (19.0665, 72.8675, "Mumbai", "Maharashtra"),
+        
+        # Delhi
+        "110001": (28.6358, 77.2245, "New Delhi", "Delhi"),
+        "110002": (28.6467, 77.2167, "New Delhi", "Delhi"),
+        "110003": (28.6728, 77.2373, "New Delhi", "Delhi"),
+        "110005": (28.6431, 77.2197, "New Delhi", "Delhi"),
+        "110006": (28.6692, 77.2297, "New Delhi", "Delhi"),
+        "110016": (28.5706, 77.2072, "New Delhi", "Delhi"),
+        "110019": (28.5355, 77.2010, "New Delhi", "Delhi"),
+        "110021": (28.5494, 77.2501, "New Delhi", "Delhi"),
+        "110025": (28.5678, 77.2047, "New Delhi", "Delhi"),
+        "110029": (28.4817, 77.1873, "New Delhi", "Delhi"),
+        
+        # Chennai
+        "600001": (13.0827, 80.2707, "Chennai", "Tamil Nadu"),
+        "600002": (13.0569, 80.2417, "Chennai", "Tamil Nadu"),
+        "600003": (13.0732, 80.2609, "Chennai", "Tamil Nadu"),
+        "600004": (13.0524, 80.2500, "Chennai", "Tamil Nadu"),
+        "600006": (13.0732, 80.2337, "Chennai", "Tamil Nadu"),
+        "600010": (13.0569, 80.2091, "Chennai", "Tamil Nadu"),
+        "600017": (13.0475, 80.2809, "Chennai", "Tamil Nadu"),
+        "600018": (13.0610, 80.2462, "Chennai", "Tamil Nadu"),
+        "600020": (13.0389, 80.2413, "Chennai", "Tamil Nadu"),
+        "600028": (13.0067, 80.2206, "Chennai", "Tamil Nadu"),
+        
+        # Hyderabad
+        "500001": (17.3850, 78.4867, "Hyderabad", "Telangana"),
+        "500002": (17.4065, 78.4691, "Hyderabad", "Telangana"),
+        "500003": (17.4239, 78.4738, "Hyderabad", "Telangana"),
+        "500004": (17.3753, 78.4744, "Hyderabad", "Telangana"),
+        "500012": (17.4315, 78.4985, "Hyderabad", "Telangana"),
+        "500016": (17.4399, 78.4482, "Hyderabad", "Telangana"),
+        "500020": (17.4126, 78.4421, "Hyderabad", "Telangana"),
+        "500034": (17.4876, 78.3953, "Hyderabad", "Telangana"),
+        "500049": (17.3616, 78.4747, "Hyderabad", "Telangana"),
+        "500081": (17.4400, 78.3489, "Hyderabad", "Telangana"),
+        
+        # Pune
+        "411001": (18.5204, 73.8567, "Pune", "Maharashtra"),
+        "411002": (18.5089, 73.8553, "Pune", "Maharashtra"),
+        "411003": (18.5167, 73.8480, "Pune", "Maharashtra"),
+        "411004": (18.5074, 73.8077, "Pune", "Maharashtra"),
+        "411005": (18.5362, 73.8697, "Pune", "Maharashtra"),
+        "411006": (18.5314, 73.8446, "Pune", "Maharashtra"),
+        "411011": (18.5018, 73.9242, "Pune", "Maharashtra"),
+        "411016": (18.5642, 73.9154, "Pune", "Maharashtra"),
+        
+        # Kolkata
+        "700001": (22.5726, 88.3639, "Kolkata", "West Bengal"),
+        "700002": (22.5568, 88.3515, "Kolkata", "West Bengal"),
+        "700012": (22.5568, 88.3742, "Kolkata", "West Bengal"),
+        "700013": (22.5488, 88.3643, "Kolkata", "West Bengal"),
+        "700016": (22.5448, 88.3426, "Kolkata", "West Bengal"),
+        "700019": (22.5354, 88.3832, "Kolkata", "West Bengal"),
+        "700027": (22.5138, 88.3832, "Kolkata", "West Bengal"),
+    }
+    
+    # Realistic doctor database with proper Indian medical credentials
+    # In production, this would come from a real database
+    SAMPLE_DOCTORS = [
+        # Cardiologists
+        {
+            "name": "Dr. Rajesh Kumar Sharma",
+            "specialization": "Cardiologist",
+            "qualification": "MD (Medicine), DM (Cardiology), FACC",
+            "experience_years": 18,
+            "clinic_name": "Apollo Heart Institute",
+            "phone": "+91-80-2658-2658",
+            "email": "dr.rajesh@apollohospitals.com",
+            "consultation_fee": 1500.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Kannada"],
+            "rating": 4.8
+        },
+        {
+            "name": "Dr. Arjun Malhotra",
+            "specialization": "Cardiologist",
+            "qualification": "MD, DM (Cardiology), FESC",
+            "experience_years": 22,
+            "clinic_name": "Fortis Heart Centre",
+            "phone": "+91-80-6621-4444",
+            "email": "dr.arjun@fortishealthcare.com",
+            "consultation_fee": 2000.0,
+            "available_days": ["Mon", "Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 2:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Punjabi"],
+            "rating": 4.9
+        },
+        {
+            "name": "Dr. Sunita Reddy",
+            "specialization": "Cardiologist",
+            "qualification": "MD, DM (Cardiology)",
+            "experience_years": 15,
+            "clinic_name": "Manipal Heart Centre",
+            "phone": "+91-80-2502-4444",
+            "email": "dr.sunita@manipalhospitals.com",
+            "consultation_fee": 1200.0,
+            "available_days": ["Tue", "Thu", "Sat"],
+            "available_hours": "11:00 AM - 3:00 PM",
+            "languages": ["English", "Telugu", "Hindi", "Kannada"],
+            "rating": 4.7
+        },
+        
+        # Neurologists
+        {
+            "name": "Dr. Priya Sharma",
+            "specialization": "Neurologist",
+            "qualification": "MD (Medicine), DM (Neurology)",
+            "experience_years": 14,
+            "clinic_name": "NeuroLife Specialty Clinic",
+            "phone": "+91-80-4179-7979",
+            "email": "dr.priya@neurolife.in",
+            "consultation_fee": 1300.0,
+            "available_days": ["Mon", "Wed", "Fri"],
+            "available_hours": "10:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Marathi"],
+            "rating": 4.8
+        },
+        {
+            "name": "Dr. Vikram Menon",
+            "specialization": "Neurologist",
+            "qualification": "MBBS, MD, DM (Neurology), FRCP",
+            "experience_years": 20,
+            "clinic_name": "Bangalore Neuro Centre",
+            "phone": "+91-80-4112-5555",
+            "email": "dr.vikram@bangaloreneuro.com",
+            "consultation_fee": 1800.0,
+            "available_days": ["Tue", "Thu", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Malayalam", "Tamil"],
+            "rating": 4.9
+        },
+        
+        # Orthopedic Surgeons
+        {
+            "name": "Dr. Amit Patel",
+            "specialization": "Orthopedic",
+            "qualification": "MBBS, MS (Ortho), DNB",
+            "experience_years": 16,
+            "clinic_name": "Bone & Joint Specialty Hospital",
+            "phone": "+91-80-2661-9191",
+            "email": "dr.amit@boneandjoint.in",
+            "consultation_fee": 1000.0,
+            "available_days": ["Mon", "Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "8:00 AM - 12:00 PM, 3:00 PM - 6:00 PM",
+            "languages": ["English", "Hindi", "Gujarati"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Ramesh Kumar",
+            "specialization": "Orthopedic",
+            "qualification": "MBBS, MS (Ortho), MCh (Ortho)",
+            "experience_years": 19,
+            "clinic_name": "Columbia Asia Ortho Centre",
+            "phone": "+91-80-6699-8999",
+            "email": "dr.ramesh@columbiaasia.com",
+            "consultation_fee": 1100.0,
+            "available_days": ["Mon", "Wed", "Thu", "Sat"],
+            "available_hours": "9:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Kannada", "Tamil"],
+            "rating": 4.6
+        },
+        
+        # Dermatologists
+        {
+            "name": "Dr. Kavita Deshmukh",
+            "specialization": "Dermatologist",
+            "qualification": "MBBS, MD (Dermatology)",
+            "experience_years": 12,
+            "clinic_name": "Skin Solutions Dermatology Clinic",
+            "phone": "+91-80-4567-8901",
+            "email": "dr.kavita@skinsolutions.in",
+            "consultation_fee": 900.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Marathi"],
+            "rating": 4.5
+        },
+        {
+            "name": "Dr. Anjali Mehta",
+            "specialization": "Dermatologist",
+            "qualification": "MBBS, MD (Dermatology), DDV",
+            "experience_years": 10,
+            "clinic_name": "Clear Skin Dermatology Centre",
+            "phone": "+91-80-2345-6789",
+            "email": "dr.anjali@clearskin.in",
+            "consultation_fee": 800.0,
+            "available_days": ["Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "11:00 AM - 2:00 PM, 6:00 PM - 9:00 PM",
+            "languages": ["English", "Hindi", "Gujarati"],
+            "rating": 4.6
+        },
+        
+        # Gastroenterologists
+        {
+            "name": "Dr. Vikram Singh Chauhan",
+            "specialization": "Gastroenterologist",
+            "qualification": "MD (Medicine), DM (Gastroenterology)",
+            "experience_years": 17,
+            "clinic_name": "Digestive Health & Liver Centre",
+            "phone": "+91-80-5678-9012",
+            "email": "dr.vikram@digestivehealth.in",
+            "consultation_fee": 1400.0,
+            "available_days": ["Mon", "Tue", "Thu", "Sat"],
+            "available_hours": "9:30 AM - 12:30 PM, 4:30 PM - 7:30 PM",
+            "languages": ["English", "Hindi", "Punjabi"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Sanjay Gupta",
+            "specialization": "Gastroenterologist",
+            "qualification": "MBBS, MD, DM (Gastroenterology)",
+            "experience_years": 21,
+            "clinic_name": "Apollo Gastro Centre",
+            "phone": "+91-80-2658-2700",
+            "email": "dr.sanjay@apollohospitals.com",
+            "consultation_fee": 1600.0,
+            "available_days": ["Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi"],
+            "rating": 4.8
+        },
+        
+        # Pulmonologists
+        {
+            "name": "Dr. Meera Nair",
+            "specialization": "Pulmonologist",
+            "qualification": "MD (TB & Chest), DM (Pulmonology)",
+            "experience_years": 13,
+            "clinic_name": "Breath Easy Pulmonary Clinic",
+            "phone": "+91-80-6789-0123",
+            "email": "dr.meera@breatheasy.in",
+            "consultation_fee": 1100.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Malayalam", "Tamil"],
+            "rating": 4.6
+        },
+        {
+            "name": "Dr. Arun Kumar",
+            "specialization": "Pulmonologist",
+            "qualification": "MBBS, MD (Medicine), DNB (Pulmonology)",
+            "experience_years": 16,
+            "clinic_name": "Manipal Chest & Allergy Centre",
+            "phone": "+91-80-2502-4500",
+            "email": "dr.arun@manipalhospitals.com",
+            "consultation_fee": 1200.0,
+            "available_days": ["Tue", "Thu", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Kannada"],
+            "rating": 4.7
+        },
+        
+        # Endocrinologists
+        {
+            "name": "Dr. Kavita Joshi",
+            "specialization": "Endocrinologist",
+            "qualification": "MD (Medicine), DM (Endocrinology)",
+            "experience_years": 14,
+            "clinic_name": "Diabetes & Hormone Care Centre",
+            "phone": "+91-80-8901-2345",
+            "email": "dr.kavita@hormonecenter.in",
+            "consultation_fee": 1100.0,
+            "available_days": ["Mon", "Tue", "Thu", "Sat"],
+            "available_hours": "11:00 AM - 2:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Marathi"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Suresh Babu",
+            "specialization": "Endocrinologist",
+            "qualification": "MBBS, MD, DM (Endocrinology)",
+            "experience_years": 18,
+            "clinic_name": "Fortis Diabetes Centre",
+            "phone": "+91-80-6621-4600",
+            "email": "dr.suresh@fortishealthcare.com",
+            "consultation_fee": 1300.0,
+            "available_days": ["Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Tamil", "Telugu"],
+            "rating": 4.8
+        },
+        
+        # General Physicians
+        {
+            "name": "Dr. Rakesh Verma",
+            "specialization": "General Physician",
+            "qualification": "MBBS, MD (Medicine)",
+            "experience_years": 15,
+            "clinic_name": "City Health Clinic",
+            "phone": "+91-80-9012-3456",
+            "email": "dr.rakesh@cityhealthclinic.in",
+            "consultation_fee": 500.0,
+            "available_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 1:00 PM, 5:00 PM - 9:00 PM",
+            "languages": ["English", "Hindi", "Kannada"],
+            "rating": 4.5
+        },
+        {
+            "name": "Dr. Anita Rao",
+            "specialization": "General Physician",
+            "qualification": "MBBS, MD (General Medicine)",
+            "experience_years": 12,
+            "clinic_name": "Health Plus Family Clinic",
+            "phone": "+91-80-0123-4567",
+            "email": "dr.anita@healthplus.in",
+            "consultation_fee": 600.0,
+            "available_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            "available_hours": "8:00 AM - 12:00 PM, 4:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Tamil", "Kannada"],
+            "rating": 4.6
+        },
+        
+        # Pediatricians
+        {
+            "name": "Dr. Priya Malhotra",
+            "specialization": "Pediatrician",
+            "qualification": "MBBS, MD (Pediatrics), IAP",
+            "experience_years": 16,
+            "clinic_name": "Little Angels Children's Clinic",
+            "phone": "+91-80-1234-5678",
+            "email": "dr.priya@littleangels.in",
+            "consultation_fee": 700.0,
+            "available_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Punjabi"],
+            "rating": 4.8
+        },
+        {
+            "name": "Dr. Ramesh Iyer",
+            "specialization": "Pediatrician",
+            "qualification": "MBBS, DCH, DNB (Pediatrics)",
+            "experience_years": 20,
+            "clinic_name": "Rainbow Children's Hospital",
+            "phone": "+91-80-4967-9999",
+            "email": "dr.ramesh@rainbowhospitals.in",
+            "consultation_fee": 800.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Tamil", "Malayalam"],
+            "rating": 4.9
+        },
+        
+        # Gynecologists
+        {
+            "name": "Dr. Shilpa Reddy",
+            "specialization": "Gynecologist",
+            "qualification": "MBBS, MS (OBG), FICOG",
+            "experience_years": 17,
+            "clinic_name": "Women's Health & Wellness Centre",
+            "phone": "+91-80-2345-7890",
+            "email": "dr.shilpa@womenshealth.in",
+            "consultation_fee": 900.0,
+            "available_days": ["Mon", "Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 2:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Telugu", "Kannada"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Neha Kapoor",
+            "specialization": "Gynecologist",
+            "qualification": "MBBS, MD (OBG), DGO",
+            "experience_years": 14,
+            "clinic_name": "Cloudnine Women's Hospital",
+            "phone": "+91-80-6699-9999",
+            "email": "dr.neha@cloudninehospitals.com",
+            "consultation_fee": 1000.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "11:00 AM - 2:00 PM, 6:00 PM - 9:00 PM",
+            "languages": ["English", "Hindi"],
+            "rating": 4.8
+        },
+        
+        # Psychiatrists
+        {
+            "name": "Dr. Aditya Sharma",
+            "specialization": "Psychiatrist",
+            "qualification": "MBBS, MD (Psychiatry)",
+            "experience_years": 12,
+            "clinic_name": "Mind & Wellness Centre",
+            "phone": "+91-80-3456-7890",
+            "email": "dr.aditya@mindwellness.in",
+            "consultation_fee": 1200.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "11:00 AM - 2:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Deepa Menon",
+            "specialization": "Psychiatrist",
+            "qualification": "MBBS, MD (Psychiatry), MRCPsych",
+            "experience_years": 15,
+            "clinic_name": "Cadabams Mental Health Centre",
+            "phone": "+91-80-9741-9741",
+            "email": "dr.deepa@cadabamshospitals.com",
+            "consultation_fee": 1500.0,
+            "available_days": ["Tue", "Thu", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Malayalam"],
+            "rating": 4.8
+        },
+        
+        # ENT Specialists
+        {
+            "name": "Dr. Sunil Kumar",
+            "specialization": "ENT Specialist",
+            "qualification": "MBBS, MS (ENT), DNB",
+            "experience_years": 16,
+            "clinic_name": "ENT Care Centre",
+            "phone": "+91-80-4567-8902",
+            "email": "dr.sunil@entcare.in",
+            "consultation_fee": 800.0,
+            "available_days": ["Mon", "Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Kannada"],
+            "rating": 4.6
+        },
+        {
+            "name": "Dr. Lakshmi Iyer",
+            "specialization": "ENT Specialist",
+            "qualification": "MBBS, MS (ENT)",
+            "experience_years": 13,
+            "clinic_name": "Apollo ENT Clinic",
+            "phone": "+91-80-2658-2800",
+            "email": "dr.lakshmi@apollohospitals.com",
+            "consultation_fee": 900.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Tamil", "Malayalam"],
+            "rating": 4.7
+        },
+        
+        # Ophthalmologists
+        {
+            "name": "Dr. Vivek Desai",
+            "specialization": "Ophthalmologist",
+            "qualification": "MBBS, MS (Ophthalmology), FRCS",
+            "experience_years": 19,
+            "clinic_name": "Vision Eye Care Centre",
+            "phone": "+91-80-5678-9013",
+            "email": "dr.vivek@visioneyecare.in",
+            "consultation_fee": 700.0,
+            "available_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Marathi", "Gujarati"],
+            "rating": 4.8
+        },
+        {
+            "name": "Dr. Ritu Agarwal",
+            "specialization": "Ophthalmologist",
+            "qualification": "MBBS, MS (Ophthalmology), FICO",
+            "experience_years": 14,
+            "clinic_name": "Sankara Eye Hospital",
+            "phone": "+91-80-2569-7500",
+            "email": "dr.ritu@sankaraeye.com",
+            "consultation_fee": 600.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 2:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi"],
+            "rating": 4.7
+        },
+        
+        # Urologists
+        {
+            "name": "Dr. Mahesh Gupta",
+            "specialization": "Urologist",
+            "qualification": "MBBS, MS (Surgery), MCh (Urology)",
+            "experience_years": 18,
+            "clinic_name": "Urology & Kidney Care Centre",
+            "phone": "+91-80-6789-0124",
+            "email": "dr.mahesh@urologycare.in",
+            "consultation_fee": 1100.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Ashok Kumar",
+            "specialization": "Urologist",
+            "qualification": "MBBS, MS, DNB (Urology)",
+            "experience_years": 21,
+            "clinic_name": "Apollo Urology Centre",
+            "phone": "+91-80-2658-2900",
+            "email": "dr.ashok@apollohospitals.com",
+            "consultation_fee": 1300.0,
+            "available_days": ["Tue", "Thu", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Tamil"],
+            "rating": 4.8
+        },
+        
+        # Nephrologists
+        {
+            "name": "Dr. Rajeev Sood",
+            "specialization": "Nephrologist",
+            "qualification": "MD (Medicine), DM (Nephrology)",
+            "experience_years": 16,
+            "clinic_name": "Kidney & Dialysis Centre",
+            "phone": "+91-80-7890-1235",
+            "email": "dr.rajeev@kidneycare.in",
+            "consultation_fee": 1200.0,
+            "available_days": ["Mon", "Tue", "Thu", "Fri", "Sat"],
+            "available_hours": "9:00 AM - 12:00 PM, 4:00 PM - 7:00 PM",
+            "languages": ["English", "Hindi", "Punjabi"],
+            "rating": 4.7
+        },
+        {
+            "name": "Dr. Smita Rao",
+            "specialization": "Nephrologist",
+            "qualification": "MBBS, MD, DM (Nephrology)",
+            "experience_years": 13,
+            "clinic_name": "Manipal Kidney Centre",
+            "phone": "+91-80-2502-4700",
+            "email": "dr.smita@manipalhospitals.com",
+            "consultation_fee": 1100.0,
+            "available_days": ["Mon", "Wed", "Fri", "Sat"],
+            "available_hours": "10:00 AM - 1:00 PM, 5:00 PM - 8:00 PM",
+            "languages": ["English", "Hindi", "Kannada", "Marathi"],
+            "rating": 4.6
+        },
+    ]
+    
+    def geocode_pincode(self, pincode: str) -> Optional[Tuple[float, float, str, str]]:
+        """
+        Convert PIN code to geographic coordinates
+        
+        Args:
+            pincode: Postal/PIN code
+            
+        Returns:
+            Tuple of (latitude, longitude, city, state) or None if not found
+        """
+        # In production, use a real geocoding API like Google Maps, OpenStreetMap, etc.
+        return self.PINCODE_COORDINATES.get(pincode)
+    
+    @staticmethod
+    def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """
+        Calculate distance between two coordinates using Haversine formula
+        
+        Args:
+            lat1, lon1: First location coordinates
+            lat2, lon2: Second location coordinates
+            
+        Returns:
+            Distance in kilometers
+        """
+        R = 6371  # Earth's radius in kilometers
+        
+        lat1_rad = math.radians(lat1)
+        lat2_rad = math.radians(lat2)
+        delta_lat = math.radians(lat2 - lat1)
+        delta_lon = math.radians(lon2 - lon1)
+        
+        a = (math.sin(delta_lat / 2) ** 2 +
+             math.cos(lat1_rad) * math.cos(lat2_rad) *
+             math.sin(delta_lon / 2) ** 2)
+        c = 2 * math.asin(math.sqrt(a))
+        
+        return R * c
+    
+    def generate_doctor_locations(
+        self,
+        center_lat: float,
+        center_lon: float,
+        city: str,
+        state: str,
+        radius_km: float,
+        count: int = 5
+    ) -> List[Tuple[float, float, str]]:
+        """
+        Generate random doctor locations within radius
+        
+        Args:
+            center_lat, center_lon: Center coordinates
+            city: City name
+            state: State name
+            radius_km: Search radius
+            count: Number of locations to generate
+            
+        Returns:
+            List of (lat, lon, address) tuples
+        """
+        locations = []
+        for i in range(count):
+            # Generate random offset within radius
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(0.5, radius_km)
+            
+            # Convert to lat/lon offset
+            lat_offset = (distance / 111.0) * math.cos(angle)
+            lon_offset = (distance / (111.0 * math.cos(math.radians(center_lat)))) * math.sin(angle)
+            
+            new_lat = center_lat + lat_offset
+            new_lon = center_lon + lon_offset
+            
+            # Generate address
+            street_names = [
+                "MG Road", "Brigade Road", "Koramangala", "Indiranagar", 
+                "Jayanagar", "Malleshwaram", "Whitefield", "HSR Layout",
+                "BTM Layout", "Electronic City", "Marathahalli", "Sarjapur Road",
+                "Bannerghatta Road", "Rajajinagar", "Basavanagudi", "JP Nagar",
+                "Yelahanka", "Hebbal", "Banashankari", "Vijayanagar"
+            ]
+            address = f"{random.randint(1, 150)}, {random.choice(street_names)}, {city}"
+            
+            locations.append((new_lat, new_lon, address))
+        
+        return locations
+    
+    async def search_doctors(self, request: DoctorSearchRequest) -> DoctorSearchResponse:
+        """
+        Search for doctors based on location and specialization
+        
+        Args:
+            request: Doctor search request
+            
+        Returns:
+            DoctorSearchResponse with matching doctors
+        """
+        logger.info(f"Searching doctors for pincode: {request.pincode}, "
+                   f"specialization: {request.specialization}")
+        
+        # Geocode the PIN code
+        location_data = self.geocode_pincode(request.pincode)
+        
+        if not location_data:
+            # If PIN code not in our database, use a default location
+            logger.warning(f"PIN code {request.pincode} not found, using default location")
+            location_data = (12.9716, 77.5946, "Bangalore", "Karnataka")
+        
+        center_lat, center_lon, city, state = location_data
+        
+        user_location = {
+            "latitude": center_lat,
+            "longitude": center_lon,
+            "address": f"{city}, {state}",
+            "pincode": request.pincode
+        }
+        
+        # Try external API first if enabled
+        if self.use_external_api:
+            logger.info("Attempting to fetch doctors from NPPES NPI Registry API")
+            try:
+                external_doctors = await self._search_with_external_api(
+                    request.pincode, request.specialization, request.radius_km
+                )
+                
+                if external_doctors:
+                    logger.info(f"Successfully fetched {len(external_doctors)} doctors from NPPES API")
+                    return DoctorSearchResponse(
+                        user_location=user_location,
+                        search_radius_km=request.radius_km,
+                        specialization=request.specialization,
+                        total_doctors_found=len(external_doctors),
+                        doctors=external_doctors,
+                        processed_at=datetime.utcnow()
+                    )
+                else:
+                    logger.warning("NPPES API returned no results, falling back to local data")
+            except Exception as e:
+                logger.error(f"NPPES API failed, falling back to local data: {str(e)}")
+        
+        # Fallback to local sample data
+        logger.info("Using local sample doctor data")
+        
+        # Filter doctors by specialization
+        matching_doctors = [
+            doc for doc in self.SAMPLE_DOCTORS
+            if request.specialization.lower() in doc["specialization"].lower()
+        ]
+        
+        # If no exact match, return all doctors (in production, use fuzzy matching)
+        if not matching_doctors:
+            logger.warning(f"No doctors found for specialization: {request.specialization}")
+            matching_doctors = self.SAMPLE_DOCTORS[:3]
+        
+        # Generate locations for doctors
+        doctor_locations = self.generate_doctor_locations(
+            center_lat, center_lon, city, state,
+            request.radius_km, len(matching_doctors)
+        )
+        
+        # Build doctor objects
+        doctors = []
+        for idx, doctor_data in enumerate(matching_doctors):
+            lat, lon, address = doctor_locations[idx]
+            distance = self.calculate_distance(center_lat, center_lon, lat, lon)
+            
+            # Generate unique ID
+            doctor_id = f"DOC{random.randint(10000, 99999)}"
+            
+            # Get random pincode nearby
+            nearby_pincode = request.pincode
+            
+            doctor = Doctor(
+                id=doctor_id,
+                name=doctor_data["name"],
+                specialization=doctor_data["specialization"],
+                qualification=doctor_data["qualification"],
+                experience_years=doctor_data["experience_years"],
+                rating=doctor_data["rating"],
+                location=DoctorLocation(
+                    latitude=lat,
+                    longitude=lon,
+                    address=address,
+                    city=city,
+                    state=state,
+                    pincode=nearby_pincode
+                ),
+                distance_km=round(distance, 2),
+                phone=doctor_data["phone"],
+                email=doctor_data.get("email"),
+                clinic_name=doctor_data["clinic_name"],
+                consultation_fee=doctor_data.get("consultation_fee"),
+                available_days=doctor_data["available_days"],
+                available_hours=doctor_data["available_hours"],
+                languages=doctor_data["languages"]
+            )
+            doctors.append(doctor)
+        
+        # Sort by distance
+        doctors.sort(key=lambda d: d.distance_km)
+        
+        response = DoctorSearchResponse(
+            user_location=user_location,
+            search_radius_km=request.radius_km,
+            specialization=request.specialization,
+            total_doctors_found=len(doctors),
+            doctors=doctors,
+            processed_at=datetime.utcnow().isoformat() + "Z"
+        )
+        
+        logger.info(f"Found {len(doctors)} doctors within {request.radius_km}km")
+        return response
+    
+    async def _search_with_external_api(
+        self,
+        pincode: str,
+        specialization: str,
+        radius_km: float
+    ) -> List[Doctor]:
+        """
+        Search doctors using NPPES external API
+        
+        Args:
+            pincode: US ZIP code
+            specialization: Medical specialization
+            radius_km: Search radius in kilometers (not used by NPPES API)
+            
+        Returns:
+            List of Doctor objects from external API
+        """
+        # Call external API with ZIP code
+        api_results = await self.external_api.search_doctors(
+            postal_code=pincode,
+            specialization=specialization,
+            state=None,  # Let API search all states
+            limit=50
+        )
+        
+        if not api_results:
+            return []
+        
+        # Convert API results to our Doctor schema
+        doctors = []
+        for doc_data in api_results:
+            try:
+                doctor = Doctor(
+                    id=doc_data["id"],
+                    name=doc_data["name"],
+                    specialization=doc_data["specialization"],
+                    qualification=doc_data["qualification"],
+                    experience_years=doc_data["experience_years"],
+                    rating=doc_data["rating"],
+                    location=DoctorLocation(
+                        latitude=doc_data["location"]["latitude"],
+                        longitude=doc_data["location"]["longitude"],
+                        address=doc_data["location"]["address"],
+                        city=doc_data["location"]["city"],
+                        state=doc_data["location"]["state"],
+                        pincode=doc_data["location"]["pincode"]
+                    ),
+                    distance_km=round(doc_data["distance_km"], 2),
+                    phone=doc_data["phone"],
+                    email=doc_data.get("email"),
+                    clinic_name=doc_data["clinic_name"],
+                    consultation_fee=doc_data.get("consultation_fee"),
+                    available_days=doc_data["available_days"],
+                    available_hours=doc_data["available_hours"],
+                    languages=doc_data.get("languages", ["English"])
+                )
+                doctors.append(doctor)
+            except Exception as e:
+                logger.warning(f"Failed to parse doctor data from API: {str(e)}")
+                continue
+        
+        # Sort by distance (though NPPES doesn't provide exact distance)
+        # doctors.sort(key=lambda d: d.distance_km)
+        
+        return doctors
+

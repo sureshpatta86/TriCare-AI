@@ -4,6 +4,13 @@ TriCare AI Backend Main Application
 FastAPI application initialization with routes, middleware, and error handlers.
 """
 
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+# This must be done before importing other modules that use env vars
+load_dotenv()
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,7 +24,7 @@ from pathlib import Path
 from datetime import datetime
 
 from app.config import get_settings
-from app.api.routes import health, reports, symptoms, imaging
+from app.api.routes import health, reports, symptoms, imaging, doctors
 
 # Configure logging
 logging.basicConfig(
@@ -172,6 +179,7 @@ app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(symptoms.router, prefix="/api/symptoms", tags=["Symptoms"])
 app.include_router(imaging.router, prefix="/api/imaging", tags=["Imaging"])
+app.include_router(doctors.router, prefix="/api", tags=["Doctor Finder"])
 
 
 @app.on_event("startup")

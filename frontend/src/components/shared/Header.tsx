@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, FileText, Stethoscope, Image as ImageIcon, Moon, Sun } from 'lucide-react';
+import { Activity, FileText, Stethoscope, Image as ImageIcon, Moon, Sun, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -21,6 +21,7 @@ export default function Header() {
     { name: 'Reports', href: '/reports', icon: FileText },
     { name: 'Symptoms', href: '/symptoms', icon: Stethoscope },
     { name: 'Imaging', href: '/imaging', icon: ImageIcon },
+    { name: 'Find Doctors', href: '/doctors', icon: MapPin },
   ];
 
   return (

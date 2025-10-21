@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FileText, Stethoscope, Image as ImageIcon, ArrowRight, Shield, Zap, Users } from 'lucide-react';
+import { FileText, Stethoscope, Image as ImageIcon, ArrowRight, Shield, Zap, Users, MapPin } from 'lucide-react';
 import DisclaimerBanner from '@/components/shared/DisclaimerBanner';
 
 export default function HomePage() {
@@ -24,6 +24,13 @@ export default function HomePage() {
       description: 'AI-powered preliminary analysis of medical imaging.',
       href: '/imaging',
       color: 'from-green-500 to-emerald-500',
+    },
+    {
+      icon: MapPin,
+      title: 'Find Nearby Doctors',
+      description: 'Search for recommended doctors based on your location.',
+      href: '/doctors',
+      color: 'from-orange-500 to-red-500',
     },
   ];
 
@@ -62,10 +69,10 @@ export default function HomePage() {
       <section id="features" className="py-20 bg-white dark:bg-gray-900">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">Three Powerful Features</h2>
+            <h2 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">Four Powerful Features</h2>
             <p className="text-lg text-gray-600 dark:text-gray-400">Choose the tool that fits your needs</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (

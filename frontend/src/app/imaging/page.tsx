@@ -204,6 +204,13 @@ export default function ImagingPage() {
                   <option value="ct">CT Scan</option>
                   <option value="mri">MRI</option>
                 </select>
+                <div className="mt-2 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    <strong>Important:</strong> Please ensure you select the correct imaging type that matches your uploaded image. 
+                    The AI analysis is optimized based on the type you select. Mismatched types may result in inaccurate analysis.
+                  </p>
+                </div>
               </div>
 
               <div
@@ -249,23 +256,43 @@ export default function ImagingPage() {
               )}
 
               {file && (
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full mt-6 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white font-semibold py-4 px-6 rounded-xl transition-colors flex items-center justify-center"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Activity className="w-5 h-5 mr-2" />
-                      Analyze Image
-                    </>
-                  )}
-                </button>
+                <>
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                          Verify Image Type Before Analysis
+                        </h4>
+                        <p className="text-sm text-blue-800 dark:text-blue-300 mb-2">
+                          You selected: <strong className="uppercase">{imageType}</strong>
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-400">
+                          Please confirm that "{file.name}" is indeed a <strong>{imageType.toUpperCase()}</strong> image. 
+                          If not, please change the imaging type above before analyzing.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-6 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white font-semibold py-4 px-6 rounded-xl transition-colors flex items-center justify-center"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="w-5 h-5 mr-2" />
+                        Analyze Image
+                      </>
+                    )}
+                  </button>
+                </>
               )}
             </form>
           </div>

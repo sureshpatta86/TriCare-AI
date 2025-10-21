@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import axios from 'axios';
-import { Stethoscope, Send, Loader2, AlertCircle, UserCircle } from 'lucide-react';
+import { Stethoscope, Send, Loader2, AlertCircle, UserCircle, Search } from 'lucide-react';
 import { symptomFormSchema, type SymptomFormData } from '@/lib/validations/schemas';
 import ProgressIndicator from '@/components/shared/ProgressIndicator';
 
@@ -27,6 +28,7 @@ interface ProgressStep {
 }
 
 export default function SymptomsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RoutingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -291,13 +293,126 @@ export default function SymptomsPage() {
                 <div className="bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 rounded-lg p-6">
                   <div className="flex items-start">
                     <UserCircle className="w-12 h-12 text-green-600 dark:text-green-400 mr-4 flex-shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                         Recommended Specialist
                       </h3>
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400 mb-4">
                         {result.recommended_specialist}
                       </p>
+                      <button
+                        onClick={() => {
+                          // Extract just the specialist name (before any brackets, dashes, or special characters)
+                          const specialistMatch = result.recommended_specialist.match(/^([A-Za-z\s]+?)(?:\s*\[|—|–|-{2,}|$)/);
+                          let specialistName = specialistMatch ? specialistMatch[1].trim() : result.recommended_specialist.split(/[\[\—–-]/)[0].trim();
+                          
+                          // Map AI variations to our dropdown values
+                          const specialistMapping: { [key: string]: string } = {
+                            // Emergency & Urgent Care
+                            'Emergency Department': 'Emergency Medicine',
+                            'Emergency Room': 'Emergency Medicine',
+                            'ER': 'Emergency Medicine',
+                            'Urgent Care Clinic': 'Urgent Care',
+                            'Urgent Care Center': 'Urgent Care',
+                            
+                            // Primary Care / Family Medicine
+                            'Primary Care': 'Family Medicine',
+                            'Primary Care Physician': 'Family Medicine',
+                            'PCP': 'Family Medicine',
+                            'Family Doctor': 'Family Medicine',
+                            'General Practitioner': 'General Physician',
+                            'GP': 'General Physician',
+                            
+                            // Cardiology
+                            'Cardiac Specialist': 'Cardiologist',
+                            'Heart Specialist': 'Cardiologist',
+                            'Heart Doctor': 'Cardiologist',
+                            
+                            // Orthopedics
+                            'Orthopedic Surgeon': 'Orthopedic',
+                            'Orthopaedic': 'Orthopedic',
+                            'Orthopaedic Surgeon': 'Orthopedic',
+                            'Bone Specialist': 'Orthopedic',
+                            
+                            // ENT
+                            'ENT': 'ENT Specialist',
+                            'Ear Nose Throat': 'ENT Specialist',
+                            'Otolaryngologist': 'ENT Specialist',
+                            
+                            // Mental Health
+                            'Mental Health Specialist': 'Psychiatrist',
+                            'Therapist': 'Psychologist',
+                            'Counselor': 'Psychologist',
+                            
+                            // Neurology
+                            'Brain Specialist': 'Neurologist',
+                            'Nerve Specialist': 'Neurologist',
+                            
+                            // Gastroenterology
+                            'GI Specialist': 'Gastroenterologist',
+                            'Digestive Specialist': 'Gastroenterologist',
+                            'Stomach Specialist': 'Gastroenterologist',
+                            
+                            // Pulmonology
+                            'Lung Specialist': 'Pulmonologist',
+                            'Respiratory Specialist': 'Pulmonologist',
+                            
+                            // Nephrology
+                            'Kidney Specialist': 'Nephrologist',
+                            'Renal Specialist': 'Nephrologist',
+                            
+                            // Endocrinology
+                            'Diabetes Specialist': 'Endocrinologist',
+                            'Hormone Specialist': 'Endocrinologist',
+                            
+                            // Dermatology
+                            'Skin Specialist': 'Dermatologist',
+                            'Skin Doctor': 'Dermatologist',
+                            
+                            // Ophthalmology
+                            'Eye Specialist': 'Ophthalmologist',
+                            'Eye Doctor': 'Ophthalmologist',
+                            
+                            // Oncology
+                            'Cancer Specialist': 'Oncologist',
+                            
+                            // Urology
+                            'Urinary Specialist': 'Urologist',
+                            
+                            // Gynecology
+                            'OB/GYN': 'Gynecologist',
+                            'OBGYN': 'Gynecologist',
+                            'Women\'s Health': 'Gynecologist',
+                            
+                            // Pediatrics
+                            'Child Specialist': 'Pediatrician',
+                            'Children\'s Doctor': 'Pediatrician',
+                            'Pediatric': 'Pediatrician',
+                            
+                            // Rheumatology
+                            'Arthritis Specialist': 'Rheumatologist',
+                            'Joint Specialist': 'Rheumatologist',
+                            
+                            // Surgery
+                            'General Surgeon': 'Surgeon',
+                            
+                            // Podiatry
+                            'Foot Specialist': 'Podiatrist',
+                            'Foot Doctor': 'Podiatrist'
+                          };
+                          
+                          // Check if we need to map the specialist name
+                          specialistName = specialistMapping[specialistName] || specialistName;
+                          
+                          // Navigate to doctor finder with pre-selected specialization
+                          router.push(`/doctors?specialization=${encodeURIComponent(specialistName)}`);
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 
+                                 text-white rounded-lg transition-colors font-medium"
+                      >
+                        <Search className="w-4 h-4" />
+                        Find {result.recommended_specialist.match(/^([A-Za-z\s]+?)(?:\s*\[|—|–|-{2,}|$)/)?.[1]?.trim() || result.recommended_specialist.split(/[\[\—–-]/)[0].trim()}
+                      </button>
                     </div>
                   </div>
                 </div>

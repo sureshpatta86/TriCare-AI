@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
-import { FileText, Upload, Loader2, AlertCircle } from 'lucide-react';
+import { FileText, Upload, Loader2, AlertCircle, Search } from 'lucide-react';
 import { reportFileSchema, type ReportFileData } from '@/lib/validations/schemas';
 import ProgressIndicator from '@/components/shared/ProgressIndicator';
 
@@ -32,6 +33,7 @@ interface ProgressStep {
 }
 
 export default function ReportsPage() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ReportResult | null>(null);
@@ -337,9 +339,123 @@ export default function ReportsPage() {
                       Recommended Specialist
                     </h3>
                     <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                      <p className="text-gray-700 dark:text-gray-300">
+                      <p className="text-gray-700 dark:text-gray-300 mb-3">
                         {result.recommended_specialist}
                       </p>
+                      <button
+                        onClick={() => {
+                          if (result.recommended_specialist) {
+                            // Extract just the specialist name (before any brackets, dashes, or special characters)
+                            const specialistMatch = result.recommended_specialist.match(/^([A-Za-z\s]+?)(?:\s*\[|—|–|-{2,}|$)/);
+                            let specialistName = specialistMatch ? specialistMatch[1].trim() : result.recommended_specialist.split(/[\[\—–-]/)[0].trim();
+                            
+                            // Map AI variations to our dropdown values
+                            const specialistMapping: { [key: string]: string } = {
+                              // Emergency & Urgent Care
+                              'Emergency Department': 'Emergency Medicine',
+                              'Emergency Room': 'Emergency Medicine',
+                              'ER': 'Emergency Medicine',
+                              'Urgent Care Clinic': 'Urgent Care',
+                              'Urgent Care Center': 'Urgent Care',
+                              
+                              // Primary Care / Family Medicine
+                              'Primary Care': 'Family Medicine',
+                              'Primary Care Physician': 'Family Medicine',
+                              'PCP': 'Family Medicine',
+                              'Family Doctor': 'Family Medicine',
+                              'General Practitioner': 'General Physician',
+                              'GP': 'General Physician',
+                              
+                              // Cardiology
+                              'Cardiac Specialist': 'Cardiologist',
+                              'Heart Specialist': 'Cardiologist',
+                              'Heart Doctor': 'Cardiologist',
+                              
+                              // Orthopedics
+                              'Orthopedic Surgeon': 'Orthopedic',
+                              'Orthopaedic': 'Orthopedic',
+                              'Orthopaedic Surgeon': 'Orthopedic',
+                              'Bone Specialist': 'Orthopedic',
+                              
+                              // ENT
+                              'ENT': 'ENT Specialist',
+                              'Ear Nose Throat': 'ENT Specialist',
+                              'Otolaryngologist': 'ENT Specialist',
+                              
+                              // Mental Health
+                              'Mental Health Specialist': 'Psychiatrist',
+                              'Therapist': 'Psychologist',
+                              'Counselor': 'Psychologist',
+                              
+                              // Neurology
+                              'Brain Specialist': 'Neurologist',
+                              'Nerve Specialist': 'Neurologist',
+                              
+                              // Gastroenterology
+                              'GI Specialist': 'Gastroenterologist',
+                              'Digestive Specialist': 'Gastroenterologist',
+                              'Stomach Specialist': 'Gastroenterologist',
+                              
+                              // Pulmonology
+                              'Lung Specialist': 'Pulmonologist',
+                              'Respiratory Specialist': 'Pulmonologist',
+                              
+                              // Nephrology
+                              'Kidney Specialist': 'Nephrologist',
+                              'Renal Specialist': 'Nephrologist',
+                              
+                              // Endocrinology
+                              'Diabetes Specialist': 'Endocrinologist',
+                              'Hormone Specialist': 'Endocrinologist',
+                              
+                              // Dermatology
+                              'Skin Specialist': 'Dermatologist',
+                              'Skin Doctor': 'Dermatologist',
+                              
+                              // Ophthalmology
+                              'Eye Specialist': 'Ophthalmologist',
+                              'Eye Doctor': 'Ophthalmologist',
+                              
+                              // Oncology
+                              'Cancer Specialist': 'Oncologist',
+                              
+                              // Urology
+                              'Urinary Specialist': 'Urologist',
+                              
+                              // Gynecology
+                              'OB/GYN': 'Gynecologist',
+                              'OBGYN': 'Gynecologist',
+                              'Women\'s Health': 'Gynecologist',
+                              
+                              // Pediatrics
+                              'Child Specialist': 'Pediatrician',
+                              'Children\'s Doctor': 'Pediatrician',
+                              'Pediatric': 'Pediatrician',
+                              
+                              // Rheumatology
+                              'Arthritis Specialist': 'Rheumatologist',
+                              'Joint Specialist': 'Rheumatologist',
+                              
+                              // Surgery
+                              'General Surgeon': 'Surgeon',
+                              
+                              // Podiatry
+                              'Foot Specialist': 'Podiatrist',
+                              'Foot Doctor': 'Podiatrist'
+                            };
+                            
+                            // Check if we need to map the specialist name
+                            specialistName = specialistMapping[specialistName] || specialistName;
+                            
+                            router.push(`/doctors?specialization=${encodeURIComponent(specialistName)}`);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 
+                                 text-white rounded-lg transition-colors font-medium"
+                      >
+                        <Search className="w-4 h-4" />
+                        Find {result.recommended_specialist.match(/^([A-Za-z\s]+?)(?:\s*\[|—|–|-{2,}|$)/)?.[1]?.trim() || result.recommended_specialist.split(/[\[\—–-]/)[0].trim()}
+                      </button>
                     </div>
                   </div>
                 )}

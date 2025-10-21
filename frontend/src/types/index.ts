@@ -5,3 +5,4 @@
 export * from './reports';
 export * from './symptoms';
 export * from './imaging';
+export * from './doctors';
