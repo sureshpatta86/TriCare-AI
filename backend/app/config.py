@@ -6,7 +6,6 @@ loading from environment variables with validation.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 from pathlib import Path
 
 # Get the backend directory path
@@ -53,6 +52,14 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     
+    # Database
+    database_url: str = "sqlite:///./tricare.db"
+    
+    # Authentication
+    secret_key: str = "your-secret-key-change-in-production-use-openssl-rand-hex-32"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    
     @property
     def cors_origins(self) -> list[str]:
         """Parse allowed origins from comma-separated string."""
@@ -64,12 +71,16 @@ class Settings(BaseSettings):
         return self.max_file_size_mb * 1024 * 1024
 
 
-@lru_cache()
+_settings = None
+
 def get_settings() -> Settings:
     """
-    Get cached settings instance.
+    Get settings instance (reloads on module reload during development).
     
     Returns:
-        Settings: Cached application settings
+        Settings: Application settings
     """
-    return Settings()
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings

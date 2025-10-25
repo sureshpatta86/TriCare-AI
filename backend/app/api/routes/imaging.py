@@ -4,15 +4,21 @@ Imaging Pre-Screen API Routes
 Endpoints for X-ray/CT image analysis and pre-screening.
 """
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
 from typing import Optional
 import logging
+import json
 
 from app.schemas.imaging import ImagingPrescreenRequest, ImagingPrescreenResponse
 from app.services.imaging_analyzer import get_imaging_analyzer
 from app.config import get_settings
+from app.database import get_db
+from app.utils.auth import get_optional_current_user
+from app.models.user import User
+from app.models.health_record import ImagingHistory
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -26,15 +32,18 @@ async def prescreen_medical_image(
     request: Request,
     file: UploadFile = File(...),
     image_type: str = Form(...),
-    body_part: Optional[str] = Form(None)
+    body_part: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Analyze medical image (X-ray, CT, MRI) and provide preliminary findings.
     
     Rate limit: 10 requests per minute per IP address.
+    Works with or without authentication. If authenticated, saves to history.
     """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
-    logger.info(f"Imaging prescreen request - correlation_id: {correlation_id}, image_type: {image_type}")
+    logger.info(f"Imaging prescreen request - correlation_id: {correlation_id}, image_type: {image_type}, authenticated: {current_user is not None}")
     
     # Validate file size (max 10MB)
     contents = await file.read()
@@ -102,6 +111,33 @@ async def prescreen_medical_image(
             image_type=image_type,
             body_part=body_part
         )
+        
+        # Save to history if user is authenticated
+        if current_user:
+            try:
+                # Convert areas_of_interest list to text
+                findings_text = "\n".join(result.areas_of_interest) if result.areas_of_interest else None
+                
+                history_entry = ImagingHistory(
+                    user_id=current_user.id,
+                    file_name=file.filename,
+                    file_type=image_type,
+                    body_part=body_part,
+                    prediction=result.prediction.value,
+                    confidence=result.confidence,
+                    findings=findings_text,
+                    explanation=result.explanation,
+                    recommendations=json.dumps(result.recommended_next_steps),
+                    model_used=result.model_used,
+                    correlation_id=correlation_id
+                )
+                db.add(history_entry)
+                db.commit()
+                logger.info(f"Saved imaging to history - user_id: {current_user.id}, correlation_id: {correlation_id}")
+            except Exception as e:
+                logger.error(f"Failed to save imaging history: {str(e)}")
+                # Don't fail the request if history save fails
+                db.rollback()
         
         logger.info(
             f"Image analysis complete: {result.prediction.value} "

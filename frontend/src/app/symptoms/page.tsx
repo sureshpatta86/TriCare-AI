@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import axios from 'axios';
 import { Stethoscope, Send, Loader2, AlertCircle, UserCircle, Search } from 'lucide-react';
 import { symptomFormSchema, type SymptomFormData } from '@/lib/validations/schemas';
+import { routeSymptoms } from '@/lib/api-client';
 import ProgressIndicator from '@/components/shared/ProgressIndicator';
+import { useAuth } from '@/contexts/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8011';
 
@@ -29,6 +30,7 @@ interface ProgressStep {
 
 export default function SymptomsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RoutingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +45,33 @@ export default function SymptomsPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors }
+    formState: { errors },
+    setValue
   } = useForm<SymptomFormData>({
     resolver: zodResolver(symptomFormSchema),
     mode: 'onBlur'
   });
+
+  // Auto-populate age and sex from user profile
+  useEffect(() => {
+    if (user) {
+      if (user.age) {
+        setValue('age', user.age);
+      }
+      if (user.sex) {
+        // Map sex values from profile to form values
+        const genderMap: Record<string, 'male' | 'female' | 'other'> = {
+          'Male': 'male',
+          'Female': 'female',
+          'Other': 'other'
+        };
+        const mappedGender = genderMap[user.sex];
+        if (mappedGender) {
+          setValue('gender', mappedGender);
+        }
+      }
+    }
+  }, [user, setValue]);
 
   const onSubmit = async (data: SymptomFormData) => {
     setLoading(true);
@@ -77,17 +101,14 @@ export default function SymptomsPage() {
         idx === 2 ? { ...step, status: 'active' } : step
       ));
 
-      const response = await axios.post(`${API_URL}/api/symptoms/route`, {
+      const response = await routeSymptoms({
         symptoms: data.symptoms.trim(),
         age: data.age || undefined,
-        gender: data.gender || undefined
+        sex: data.gender || undefined,
+        duration: undefined,
+        existing_conditions: undefined,
+        current_medications: undefined
       });
-      
-      // Extract correlation ID
-      const corrId = response.headers['x-correlation-id'];
-      if (corrId) {
-        setCorrelationId(corrId);
-      }
       
       // Step 4: Generating recommendations
       setProgressSteps(prev => prev.map((step, idx) => 
@@ -99,7 +120,7 @@ export default function SymptomsPage() {
       
       // Complete
       setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
-      setResult(response.data);
+      setResult(response);
       
     } catch (err: unknown) {
       const axiosError = err as { 

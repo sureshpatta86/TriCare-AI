@@ -66,24 +66,12 @@ export default function Footer() {
         <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              © {currentYear} TriCare AI. Built with <Heart className="inline h-4 w-4 text-urgent-500" /> for education.
+              © {currentYear} TriCare AI. Built with <Heart className="inline h-4 w-4 text-urgent-500" /> for UHG Hackathon 2025
             </p>
             
             <div className="flex items-center space-x-4">
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                <Github className="h-5 w-5" />
-              </a>
-              <a
-                href="mailto:support@tricare-ai.com"
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                <Mail className="h-5 w-5" />
-              </a>
+              <Github className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <Mail className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             </div>
           </div>
         </div>

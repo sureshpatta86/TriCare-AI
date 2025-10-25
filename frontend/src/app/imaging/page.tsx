@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
 import { Image as ImageIcon, Upload, Loader2, AlertCircle, Activity } from 'lucide-react';
 import { imagingFileSchema, type ImagingFileData } from '@/lib/validations/schemas';
+import { prescreenImage } from '@/lib/api-client';
 import ProgressIndicator from '@/components/shared/ProgressIndicator';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8011';
@@ -110,17 +110,10 @@ export default function ImagingPage() {
         idx === 2 ? { ...step, status: 'active' } : step
       ));
 
-      const response = await axios.post(`${API_URL}/api/imaging/prescreen`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      // Extract correlation ID from response headers
-      const corrId = response.headers['x-correlation-id'];
-      if (corrId) {
-        setCorrelationId(corrId);
-      }
+      const response = await prescreenImage(
+        data.file,
+        imageType
+      );
       
       // Step 4: Generating results
       setProgressSteps(prev => prev.map((step, idx) => 
@@ -132,7 +125,7 @@ export default function ImagingPage() {
       
       // Complete
       setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
-      setResult(response.data);
+      setResult(response);
       
     } catch (err: unknown) {
       const axiosError = err as { 

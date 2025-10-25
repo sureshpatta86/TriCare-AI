@@ -24,7 +24,8 @@ from pathlib import Path
 from datetime import datetime
 
 from app.config import get_settings
-from app.api.routes import health, reports, symptoms, imaging, doctors
+from app.api.routes import health, reports, symptoms, imaging, doctors, auth, history
+from app.database import engine, Base
 
 # Configure logging
 logging.basicConfig(
@@ -176,6 +177,8 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["Health"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(history.router, prefix="/api/history", tags=["Health History"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(symptoms.router, prefix="/api/symptoms", tags=["Symptoms"])
 app.include_router(imaging.router, prefix="/api/imaging", tags=["Imaging"])
@@ -188,6 +191,11 @@ async def startup_event():
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"Allowed origins: {settings.cors_origins}")
+    
+    # Create database tables
+    logger.info("Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
 
 
 @app.on_event("shutdown")

@@ -20,32 +20,15 @@ from app.services.external_doctor_api import ExternalDoctorAPIService
 
 logger = logging.getLogger(__name__)
 
-# Debug: Check if external API will be enabled
-_use_external_api = os.getenv("USE_EXTERNAL_DOCTOR_API", "false").lower() == "true"
-logger.info(f"Module loaded - USE_EXTERNAL_DOCTOR_API={_use_external_api}")
-
 
 class DoctorFinderService:
-    """Service for finding doctors based on location and specialization"""
+    """Service for finding doctors based on location and specialization using NPPES NPI Registry"""
     
     def __init__(self):
-        """Initialize the doctor finder service"""
-        try:
-            logger.info("DoctorFinderService __init__ starting...")
-            self.external_api = ExternalDoctorAPIService()
-            logger.info("ExternalDoctorAPIService created")
-            self.use_external_api = os.getenv("USE_EXTERNAL_DOCTOR_API", "false").lower() == "true"
-            logger.info(f"use_external_api set to: {self.use_external_api}")
-            
-            if self.use_external_api:
-                logger.info("External Doctor API integration enabled")
-            else:
-                logger.info("Using local sample doctor data")
-        except Exception as e:
-            logger.error(f"Error in DoctorFinderService __init__: {e}", exc_info=True)
-            # Set defaults on error
-            self.external_api = None
-            self.use_external_api = False
+        """Initialize the doctor finder service with external API"""
+        logger.info("Initializing DoctorFinderService with NPPES API")
+        self.external_api = ExternalDoctorAPIService()
+        logger.info("NPPES API service ready")
     
     
     # ZIP code to coordinates mapping for USA (for future geocoding if needed)
@@ -193,105 +176,30 @@ class DoctorFinderService:
             "pincode": request.pincode
         }
         
-        # Try external API first if enabled
-        if self.use_external_api:
-            logger.info("Attempting to fetch doctors from NPPES NPI Registry API")
-            try:
-                # Use default radius if not provided (not used for filtering anyway)
-                radius_km = request.radius_km or 10.0
-                limit = request.limit or 50
-                
-                external_doctors = await self._search_with_external_api(
-                    request.pincode, request.specialization, radius_km, limit
-                )
-                
-                if external_doctors:
-                    logger.info(f"Successfully fetched {len(external_doctors)} doctors from NPPES API")
-                    return DoctorSearchResponse(
-                        user_location=user_location,
-                        search_radius_km=radius_km,
-                        specialization=request.specialization,
-                        total_doctors_found=len(external_doctors),
-                        doctors=external_doctors,
-                        processed_at=datetime.utcnow().isoformat() + "Z"
-                    )
-                else:
-                    logger.warning("NPPES API returned no results, falling back to local data")
-            except Exception as e:
-                logger.error(f"NPPES API failed, falling back to local data: {str(e)}")
+        # Use external NPPES API
+        logger.info("Fetching doctors from NPPES NPI Registry API")
         
-        # Fallback to local sample data
-        logger.info("Using local sample doctor data")
+        # Use default radius if not provided
+        radius_km = request.radius_km or 10.0
+        limit = request.limit or 50
         
-        # Filter doctors by specialization
-        matching_doctors = [
-            doc for doc in self.SAMPLE_DOCTORS
-            if request.specialization.lower() in doc["specialization"].lower()
-        ]
-        
-        # If no exact match, return all doctors (in production, use fuzzy matching)
-        if not matching_doctors:
-            logger.warning(f"No doctors found for specialization: {request.specialization}")
-            matching_doctors = self.SAMPLE_DOCTORS[:3]
-        
-        # Generate locations for doctors
-        doctor_locations = self.generate_doctor_locations(
-            center_lat, center_lon, city, state,
-            request.radius_km, len(matching_doctors)
+        external_doctors = await self._search_with_external_api(
+            request.pincode, request.specialization, radius_km, limit
         )
         
-        # Build doctor objects
-        doctors = []
-        for idx, doctor_data in enumerate(matching_doctors):
-            lat, lon, address = doctor_locations[idx]
-            distance = self.calculate_distance(center_lat, center_lon, lat, lon)
-            
-            # Generate unique ID
-            doctor_id = f"DOC{random.randint(10000, 99999)}"
-            
-            # Get random pincode nearby
-            nearby_pincode = request.pincode
-            
-            doctor = Doctor(
-                id=doctor_id,
-                name=doctor_data["name"],
-                specialization=doctor_data["specialization"],
-                qualification=doctor_data["qualification"],
-                experience_years=doctor_data["experience_years"],
-                rating=doctor_data["rating"],
-                location=DoctorLocation(
-                    latitude=lat,
-                    longitude=lon,
-                    address=address,
-                    city=city,
-                    state=state,
-                    pincode=nearby_pincode
-                ),
-                distance_km=round(distance, 2),
-                phone=doctor_data["phone"],
-                email=doctor_data.get("email"),
-                clinic_name=doctor_data["clinic_name"],
-                consultation_fee=doctor_data.get("consultation_fee"),
-                available_days=doctor_data["available_days"],
-                available_hours=doctor_data["available_hours"],
-                languages=doctor_data["languages"]
-            )
-            doctors.append(doctor)
+        if external_doctors:
+            logger.info(f"Successfully fetched {len(external_doctors)} doctors from NPPES API")
+        else:
+            logger.warning("NPPES API returned no results for the given search criteria")
         
-        # Sort by distance
-        doctors.sort(key=lambda d: d.distance_km)
-        
-        response = DoctorSearchResponse(
+        return DoctorSearchResponse(
             user_location=user_location,
-            search_radius_km=request.radius_km,
+            search_radius_km=radius_km,
             specialization=request.specialization,
-            total_doctors_found=len(doctors),
-            doctors=doctors,
+            total_doctors_found=len(external_doctors),
+            doctors=external_doctors,
             processed_at=datetime.utcnow().isoformat() + "Z"
         )
-        
-        logger.info(f"Found {len(doctors)} doctors within {request.radius_km}km")
-        return response
     
     def _guess_state_from_zip(self, zip_code: str) -> str:
         """

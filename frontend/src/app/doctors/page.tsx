@@ -3,10 +3,11 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Search, MapPin, Phone, Mail, Clock, Star, Navigation, Filter } from 'lucide-react';
+import { Search, MapPin, Phone, Mail, Clock, Star, Navigation, Filter, Heart } from 'lucide-react';
 import { DoctorSearchRequest, DoctorSearchResponse, Doctor } from '@/types/doctors';
-import { api } from '@/lib/api-client';
+import { api, addFavoriteDoctor, removeFavoriteDoctor, getFavoriteDoctors } from '@/lib/api-client';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Dynamically import the map component (client-side only)
 const DoctorMap = dynamic(() => import('@/components/doctors/DoctorMap'), {
@@ -20,6 +21,7 @@ const DoctorMap = dynamic(() => import('@/components/doctors/DoctorMap'), {
 
 function DoctorFinderContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [pincode, setPincode] = useState('');
   const [specialization, setSpecialization] = useState('');
   const [limit, setLimit] = useState(50);
@@ -29,6 +31,10 @@ function DoctorFinderContent() {
   const [error, setError] = useState('');
   const [correlationId, setCorrelationId] = useState('');
   const [progress, setProgress] = useState(0);
+  const [favoriteDoctorIds, setFavoriteDoctorIds] = useState<Set<string>>(new Set());
+  const [isFavoriting, setIsFavoriting] = useState(false);
+  const [favoriteMessage, setFavoriteMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [comingSoonMessage, setComingSoonMessage] = useState(false);
 
   // Check for pre-selected specialization from URL params
   useEffect(() => {
@@ -38,6 +44,77 @@ function DoctorFinderContent() {
       setSpecialization(specializationParam);
     }
   }, [searchParams, specialization]);
+
+  // Auto-populate postal code from user profile
+  useEffect(() => {
+    if (user?.postal_code && !pincode) {
+      setPincode(user.postal_code);
+    }
+  }, [user, pincode]);
+
+  // Load favorite doctors if user is logged in
+  useEffect(() => {
+    if (user) {
+      loadFavoriteDoctors();
+    }
+  }, [user]);
+
+  const loadFavoriteDoctors = async () => {
+    try {
+      const favorites = await getFavoriteDoctors();
+      const ids = new Set(favorites.map(fav => fav.doctor_id));
+      setFavoriteDoctorIds(ids);
+    } catch (err) {
+      console.error('Failed to load favorites:', err);
+    }
+  };
+
+  const handleToggleFavorite = async (doctor: Doctor) => {
+    if (!user) {
+      setFavoriteMessage({ type: 'error', text: 'Please log in to save favorite doctors' });
+      setTimeout(() => setFavoriteMessage(null), 3000);
+      return;
+    }
+
+    setIsFavoriting(true);
+    const isFavorite = favoriteDoctorIds.has(doctor.id);
+
+    try {
+      if (isFavorite) {
+        // Find the favorite ID and remove it
+        const favorites = await getFavoriteDoctors();
+        const favorite = favorites.find(fav => fav.doctor_id === doctor.id);
+        if (favorite) {
+          await removeFavoriteDoctor(favorite.id);
+          setFavoriteDoctorIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(doctor.id);
+            return newSet;
+          });
+          setFavoriteMessage({ type: 'success', text: 'Removed from favorites' });
+        }
+      } else {
+        // Add to favorites
+        await addFavoriteDoctor({
+          doctor_id: doctor.id,
+          doctor_name: doctor.name,
+          specialization: doctor.specialization,
+          clinic_name: doctor.clinic_name,
+          phone: doctor.phone,
+          address: `${doctor.location.address}, ${doctor.location.city}, ${doctor.location.state} - ${doctor.location.pincode}`,
+        });
+        setFavoriteDoctorIds(prev => new Set(prev).add(doctor.id));
+        setFavoriteMessage({ type: 'success', text: 'Added to favorites' });
+      }
+      setTimeout(() => setFavoriteMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+      setFavoriteMessage({ type: 'error', text: 'Failed to update favorites' });
+      setTimeout(() => setFavoriteMessage(null), 3000);
+    } finally {
+      setIsFavoriting(false);
+    }
+  };
 
   // Common specializations (alphabetically sorted)
   const specializations = [
@@ -147,6 +224,33 @@ function DoctorFinderContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Coming Soon Toast Notification - Fixed Position */}
+      {comingSoonMessage && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+          <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 dark:bg-blue-900/90 dark:border-blue-700 dark:text-blue-200 rounded-lg shadow-lg p-4 max-w-md">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-base">Book Appointment - Coming Soon! 🏥</p>
+                <p className="text-sm mt-1">We're working on this feature. Stay tuned for updates!</p>
+              </div>
+              <button
+                onClick={() => setComingSoonMessage(false)}
+                className="flex-shrink-0 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Progress Bar */}
       {progress > 0 && (
         <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 dark:bg-gray-700 z-50">
@@ -261,7 +365,19 @@ function DoctorFinderContent() {
 
         {/* Results */}
         {searchResults && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div>
+            {/* Favorite Message */}
+            {favoriteMessage && (
+              <div className={`mb-4 p-4 rounded-lg border ${
+                favoriteMessage.type === 'success'
+                  ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                  : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+              }`}>
+                {favoriteMessage.text}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Doctor List */}
             <div className="lg:col-span-1 space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
@@ -466,7 +582,26 @@ function DoctorFinderContent() {
                   </div>
                   
                   <div className="mt-6 flex gap-4">
-                    <button className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white 
+                    <button
+                      onClick={() => handleToggleFavorite(selectedDoctor)}
+                      disabled={isFavoriting}
+                      className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2
+                                 ${favoriteDoctorIds.has(selectedDoctor.id)
+                                   ? 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400'
+                                   : 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'
+                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <Heart 
+                        className={`w-5 h-5 ${favoriteDoctorIds.has(selectedDoctor.id) ? 'fill-current' : ''}`}
+                      />
+                      {favoriteDoctorIds.has(selectedDoctor.id) ? 'Saved' : 'Save'}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setComingSoonMessage(true);
+                        setTimeout(() => setComingSoonMessage(false), 5000);
+                      }}
+                      className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white 
                                      rounded-lg transition-colors font-medium">
                       Book Appointment
                     </button>
@@ -513,6 +648,7 @@ function DoctorFinderContent() {
                 </div>
               )}
             </div>
+          </div>
           </div>
         )}
 

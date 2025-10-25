@@ -54,3 +54,34 @@ export interface Specialization {
   label: string;
   value: string;
 }
+
+export interface FavoriteDoctorCreate {
+  doctor_id: string;
+  doctor_name: string;
+  specialization: string;
+  clinic_name?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface FavoriteDoctorUpdate {
+  notes?: string;
+  last_visit?: string;
+  next_appointment?: string;
+}
+
+export interface FavoriteDoctor {
+  id: number;
+  user_id: number;
+  doctor_id: string;
+  doctor_name: string;
+  specialization: string;
+  clinic_name?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  last_visit?: string;
+  next_appointment?: string;
+  created_at: string;
+}

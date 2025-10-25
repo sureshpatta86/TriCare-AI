@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
 import { FileText, Upload, Loader2, AlertCircle, Search } from 'lucide-react';
 import { reportFileSchema, type ReportFileData } from '@/lib/validations/schemas';
+import { simplifyReport } from '@/lib/api-client';
 import ProgressIndicator from '@/components/shared/ProgressIndicator';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8011';
@@ -109,17 +109,7 @@ export default function ReportsPage() {
         idx === 2 ? { ...step, status: 'active' } : step
       ));
 
-      const response = await axios.post(`${API_URL}/api/reports/simplify`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      // Extract correlation ID
-      const corrId = response.headers['x-correlation-id'];
-      if (corrId) {
-        setCorrelationId(corrId);
-      }
+      const response = await simplifyReport(data.file);
       
       // Step 4: Generating summary
       setProgressSteps(prev => prev.map((step, idx) => 
@@ -131,7 +121,7 @@ export default function ReportsPage() {
       
       // Complete
       setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
-      setResult(response.data);
+      setResult(response);
       
     } catch (err: unknown) {
       const axiosError = err as { 

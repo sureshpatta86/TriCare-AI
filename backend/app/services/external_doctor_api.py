@@ -3,7 +3,6 @@ External Doctor API Integration Service
 Integrates with NPPES NPI Registry for real-time US doctor data
 """
 import logging
-import os
 import httpx
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -16,7 +15,7 @@ class ExternalDoctorAPIService:
     
     def __init__(self):
         """Initialize the external API service"""
-        self.api_base_url = os.getenv("DOCTORS_API_BASE_URL", "https://npiregistry.cms.hhs.gov/api")
+        self.api_base_url = "https://npiregistry.cms.hhs.gov/api"
         self.api_version = "2.1"
         self.timeout = 30.0
         

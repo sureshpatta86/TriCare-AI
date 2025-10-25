@@ -4,13 +4,20 @@ Symptom Router API Routes
 Endpoints for symptom analysis and specialist routing.
 """
 
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, HTTPException, status, Request, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+from typing import Optional
 import logging
+import json
 
 from app.schemas.symptoms import SymptomRouteRequest, SymptomRouteResponse
 from app.graphs.symptom_workflow import get_symptom_workflow
+from app.database import get_db
+from app.utils.auth import get_optional_current_user
+from app.models.user import User
+from app.models.health_record import SymptomHistory
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -21,12 +28,15 @@ limiter = Limiter(key_func=get_remote_address)
 @limiter.limit("30/minute")  # Rate limit: 30 requests per minute
 async def route_symptoms(
     request: Request,
-    symptom_request: SymptomRouteRequest
+    symptom_request: SymptomRouteRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Analyze symptoms and route to appropriate specialist.
     
     Rate limit: 30 requests per minute per IP address.
+    Works with or without authentication. If authenticated, saves to history.
     
     Uses LangGraph workflow to:
     1. Extract and structure symptoms
@@ -45,7 +55,11 @@ async def route_symptoms(
         HTTPException: If processing fails
     """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
-    logger.info(f"Processing symptom routing request - correlation_id: {correlation_id}")
+    logger.info(f"Processing symptom routing request - correlation_id: {correlation_id}, authenticated: {current_user is not None}")
+    if current_user:
+        logger.info(f"Authenticated user detected - user_id: {current_user.id}, email: {current_user.email}")
+    else:
+        logger.info("No authenticated user - anonymous request")
     
     try:
         # Initialize workflow state
@@ -72,6 +86,33 @@ async def route_symptoms(
             suggested_tests=result.get("suggested_tests", []),
             home_care_tips=result.get("home_care_tips", [])
         )
+        
+        # Save to history if user is authenticated
+        if current_user:
+            try:
+                history_entry = SymptomHistory(
+                    user_id=current_user.id,
+                    symptoms=symptom_request.symptoms,
+                    age=symptom_request.age,
+                    sex=symptom_request.sex,
+                    duration=symptom_request.duration,
+                    chronic_diseases=json.dumps(symptom_request.existing_conditions or []),
+                    current_medications=json.dumps(symptom_request.current_medications or []),
+                    specialist_recommendation=response.recommended_specialist,
+                    urgency_level=response.urgency_level,
+                    reasoning=response.reasoning,
+                    red_flags=json.dumps(response.red_flags),
+                    suggested_tests=json.dumps(response.suggested_tests),
+                    self_care_advice=json.dumps(response.home_care_tips),
+                    correlation_id=correlation_id
+                )
+                db.add(history_entry)
+                db.commit()
+                logger.info(f"Saved symptom to history - user_id: {current_user.id}, correlation_id: {correlation_id}")
+            except Exception as e:
+                logger.error(f"Failed to save symptom history: {str(e)}")
+                # Don't fail the request if history save fails
+                db.rollback()
         
         logger.info(f"Symptom routing completed - correlation_id: {correlation_id}, specialist: {response.recommended_specialist}")
         return response
