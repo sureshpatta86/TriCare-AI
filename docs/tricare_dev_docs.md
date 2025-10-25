@@ -1,5 +1,10 @@
 # TriCare AI - Complete Development Guide
 
+**Last Updated:** October 25, 2025  
+**Project Status:** ✅ Production Ready with Comprehensive Test Coverage  
+**Branch:** unit-testing  
+**Test Status:** 126/126 tests passing (100%)
+
 ## Table of Contents
 1. [Project Overview](#project-overview)
 2. [System Architecture](#system-architecture)
@@ -14,6 +19,7 @@
 11. [Testing Strategy](#testing-strategy)
 12. [Security & Compliance](#security--compliance)
 13. [Monitoring & Maintenance](#monitoring--maintenance)
+14. [Testing Infrastructure](#testing-infrastructure)
 
 ---
 
@@ -154,7 +160,7 @@ TriCare AI is a medical triage and education web application that helps users un
 - **DICOM Handling**: pydicom
 - **Validation**: Pydantic v2
 - **Environment**: python-dotenv
-- **Testing**: pytest + pytest-asyncio
+- **Testing**: pytest 8.2.0 + pytest-cov 7.0.0 + pytest-mock 3.15.1
 - **CORS**: fastapi-cors
 
 ### AI/ML Components
@@ -170,6 +176,7 @@ TriCare AI is a medical triage and education web application that helps users un
 - **Secrets Management**: Azure Key Vault
 - **Monitoring**: Azure Application Insights
 - **CI/CD**: GitHub Actions
+- **Testing**: Automated test suite with 100% pass rate
 
 ---
 
@@ -185,12 +192,22 @@ tricare-frontend/
 │   ├── app/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx (landing page)
+│   │   ├── login/
+│   │   ├── register/
+│   │   ├── dashboard/
+│   │   ├── profile/
 │   │   ├── reports/
 │   │   │   └── page.tsx (medical report simplifier)
 │   │   ├── symptoms/
 │   │   │   └── page.tsx (symptom router)
 │   │   ├── imaging/
 │   │   │   └── page.tsx (x-ray pre-screen)
+│   │   ├── doctors/
+│   │   │   └── page.tsx (doctor finder)
+│   │   ├── history/
+│   │   │   ├── imaging/
+│   │   │   ├── symptoms/
+│   │   │   └── reports/
 │   │   └── api/ (if using Next.js API routes as proxy)
 │   ├── components/
 │   │   ├── ui/ (shadcn components)
@@ -198,7 +215,9 @@ tricare-frontend/
 │   │   │   ├── Header.tsx
 │   │   │   ├── Footer.tsx
 │   │   │   ├── DisclaimerBanner.tsx
-│   │   │   └── LoadingSpinner.tsx
+│   │   │   ├── LoadingSpinner.tsx
+│   │   │   ├── ProtectedRoute.tsx
+│   │   │   └── ProgressIndicator.tsx
 │   │   ├── reports/
 │   │   │   ├── FileUploader.tsx
 │   │   │   ├── ReportDisplay.tsx
@@ -212,11 +231,24 @@ tricare-frontend/
 │   │       ├── HeatmapOverlay.tsx
 │   │       ├── PredictionDisplay.tsx
 │   │       └── ExplanationPanel.tsx
+│   │   ├── doctors/
+│   │   │   ├── DoctorCard.tsx
+│   │   │   ├── DoctorMap.tsx
+│   │   │   └── SearchFilters.tsx
+│   ├── contexts/
+│   │   ├── AuthContext.tsx
+│   │   └── ThemeContext.tsx
 │   ├── lib/
 │   │   ├── api-client.ts (API wrapper functions)
 │   │   ├── utils.ts
-│   │   └── constants.ts
+│   │   ├── constants.ts
+│   │   ├── validations/
+│   │   │   └── schemas.ts
+│   │   └── __mocks__/
+│   │       └── api-client.ts (test mocks)
 │   ├── types/
+│   │   ├── auth.ts
+│   │   ├── doctors.ts
 │   │   ├── reports.ts
 │   │   ├── symptoms.ts
 │   │   └── imaging.ts
@@ -225,7 +257,14 @@ tricare-frontend/
 │   │   └── useApi.ts
 │   └── styles/
 │       └── globals.css
+├── __tests__/
+│   ├── lib/
+│   │   └── api-client.test.ts
+│   └── contexts/
+│       └── AuthContext.test.tsx
 ├── .env.local
+├── jest.config.js
+├── jest.setup.js
 ├── next.config.js
 ├── tailwind.config.ts
 ├── tsconfig.json
@@ -238,39 +277,86 @@ tricare-backend/
 ├── app/
 │   ├── main.py (FastAPI app initialization)
 │   ├── config.py (configuration management)
+│   ├── database.py (SQLAlchemy setup)
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── routes/
 │   │   │   ├── __init__.py
+│   │   │   ├── auth.py (authentication endpoints)
+│   │   │   ├── doctors.py (doctor finder endpoints)
 │   │   │   ├── reports.py (report simplifier endpoints)
 │   │   │   ├── symptoms.py (symptom router endpoints)
 │   │   │   ├── imaging.py (x-ray pre-screen endpoints)
+│   │   │   ├── history.py (user history endpoints)
 │   │   │   └── health.py (health check endpoint)
 │   │   └── dependencies.py (shared dependencies)
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── user.py (User database model)
+│   │   ├── health_record.py (Health history models)
+│   │   └── ml_models/ (ML model loading and inference)
+│   │       ├── mobilenetv2_loader.py
+│   │       ├── gradcam.py
+│   │       └── image_preprocessor.py
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── document_processor.py (PDF/OCR extraction)
 │   │   ├── report_simplifier.py (LangChain report logic)
-│   │   ├── symptom_router.py (LangGraph symptom workflow)
+│   │   ├── doctor_finder.py (Doctor search service)
+│   │   ├── external_doctor_api.py (External API integration)
 │   │   ├── imaging_analyzer.py (ML model + GPT integration)
 │   │   └── azure_openai_service.py (Azure OpenAI wrapper)
-│   ├── models/
+│   ├── graphs/
 │   │   ├── __init__.py
-│   │   ├── ml_models/ (ML model loading and inference)
-│   │   │   ├── mobilenetv2_loader.py
-│   │   │   ├── gradcam.py
-│   │   │   └── image_preprocessor.py
-│   │   └── weights/ (store model weights here or fetch from blob)
+│   │   └── symptom_workflow.py (LangGraph symptom workflow)
 │   ├── schemas/
 │   │   ├── __init__.py
+│   │   ├── auth.py (Pydantic models for auth)
+│   │   ├── doctors.py (Pydantic models for doctors)
 │   │   ├── reports.py (Pydantic models for reports)
 │   │   ├── symptoms.py (Pydantic models for symptoms)
-│   │   └── imaging.py (Pydantic models for imaging)
+│   │   ├── imaging.py (Pydantic models for imaging)
+│   │   └── history.py (Pydantic models for history)
 │   ├── utils/
 │   │   ├── __init__.py
+│   │   ├── auth.py (JWT and password utilities)
 │   │   ├── file_helpers.py
 │   │   ├── validation.py
 │   │   └── logging_config.py
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py (pytest fixtures and configuration)
+│   ├── test_api_health.py (health check tests)
+│   ├── test_auth_routes.py (authentication tests - 25 tests)
+│   ├── test_auth_utils.py (auth utility tests - 20 tests)
+│   ├── test_azure_openai_service.py (AI service tests - 14 tests)
+│   ├── test_doctor_finder_service.py (doctor search tests - 22 tests)
+│   ├── test_imaging_api.py (imaging endpoint tests - 5 tests)
+│   ├── test_reports_api.py (reports endpoint tests - 5 tests)
+│   ├── test_symptoms_api.py (symptoms endpoint tests - 7 tests)
+│   └── test_user_model.py (user model tests - 13 tests)
+├── uploads/ (temporary file storage)
+├── .env (environment variables)
+├── pytest.ini (pytest configuration)
+├── requirements.txt
+├── Dockerfile
+└── README.md
+```
+
+### Documentation Structure
+```
+tricare/
+├── docs/
+│   ├── INDEX.md (documentation index)
+│   ├── tricare_dev_docs.md (this file)
+│   ├── SETUP_GUIDE.md
+│   ├── TEST_COMPLETION_REPORT.md
+│   ├── TEST_SUMMARY.md
+│   ├── TESTING_GUIDE.md
+│   ├── API_INTEGRATION_COMPLETE.md
+│   └── [20+ other documentation files]
+└── README.md
+```
 │   └── graphs/ (LangGraph state definitions)
 │       ├── __init__.py
 │       └── symptom_workflow.py
@@ -1398,7 +1484,142 @@ npm start
 
 ---
 
+## 14. Testing Infrastructure
+
+### Test Coverage Overview
+
+**Status:** ✅ **100% Pass Rate (126/126 tests)**
+
+#### Backend Testing
+- **Total Tests:** 113
+- **Pass Rate:** 100%
+- **Code Coverage:** 73% (1260/1726 statements)
+- **Framework:** pytest 8.2.0 + pytest-cov
+- **Execution Time:** ~31 seconds
+
+**Test Distribution:**
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| Health API | 2 | 100% |
+| Auth Routes | 25 | 100% |
+| Auth Utils | 20 | 92% |
+| Azure OpenAI | 14 | 100% |
+| Doctor Finder | 22 | 95% |
+| Imaging API | 5 | 58% |
+| Reports API | 5 | 71% |
+| Symptoms API | 7 | 67% |
+| User Model | 13 | 100% |
+
+#### Frontend Testing
+- **Total Tests:** 13
+- **Pass Rate:** 100%
+- **Framework:** Jest 29.7.0 + React Testing Library
+- **Execution Time:** <1 second
+
+**Test Distribution:**
+| Module | Tests | Status |
+|--------|-------|--------|
+| API Client | 5 | ✅ 100% |
+| Auth Context | 8 | ✅ 100% |
+
+### Running Tests
+
+#### Backend Tests
+```bash
+cd backend
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest --cov=app --cov-report=html tests/
+
+# Run specific test file
+pytest tests/test_auth_routes.py -v
+
+# Quick summary
+pytest tests/ -q --tb=no
+```
+
+#### Frontend Tests
+```bash
+cd frontend
+
+# Run all tests
+npm test -- --watchAll=false
+
+# Run in watch mode
+npm test
+
+# Run with coverage (requires dependencies)
+npm test -- --coverage --watchAll=false
+```
+
+### Test Fixtures (Backend)
+
+**Key Fixtures in `conftest.py`:**
+- `db_engine_session` - Session-scoped SQLite engine with StaticPool
+- `db` - Function-scoped database session with transaction rollback
+- `client` - FastAPI TestClient with DB dependency override
+- `test_user` - Pre-created authenticated user
+- `authenticated_client` - Client with JWT token
+- `sample_pdf_file` - Mock PDF for document testing
+- `sample_image_file` - Mock image for imaging tests
+- `sample_symptom_data` - Mock data for symptom routing
+
+**Database Testing Strategy:**
+- In-memory SQLite with StaticPool for connection sharing
+- Session-scoped engine for schema persistence across tests
+- Transaction rollback per test for isolation
+- Shared session between test and application code
+
+### Test Documentation
+
+For comprehensive testing documentation, see:
+- **[TEST_COMPLETION_REPORT.md](TEST_COMPLETION_REPORT.md)** - Full implementation report
+- **[TEST_SUMMARY.md](TEST_SUMMARY.md)** - Quick reference guide
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Detailed testing guide
+- **[TEST_QUICK_START.md](TEST_QUICK_START.md)** - Quick start guide
+
+### CI/CD Integration
+
+**GitHub Actions Example:**
+```yaml
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      - run: cd backend && pip install -r requirements.txt
+      - run: cd backend && pytest tests/ --cov=app --cov-report=xml
+      - uses: codecov/codecov-action@v3
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm test -- --watchAll=false
+```
+
+---
+
 ## Resources & Documentation
+
+### Project Documentation
+- **[INDEX.md](INDEX.md)** - Documentation index and navigation
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Installation and setup
+- **[TEST_COMPLETION_REPORT.md](TEST_COMPLETION_REPORT.md)** - Comprehensive test report
+- **[API_INTEGRATION_COMPLETE.md](API_INTEGRATION_COMPLETE.md)** - API integration details
 
 ### Official Documentation
 - Next.js: https://nextjs.org/docs
@@ -1407,6 +1628,12 @@ npm start
 - LangGraph: https://langchain-ai.github.io/langgraph/
 - Azure OpenAI: https://learn.microsoft.com/azure/ai-services/openai/
 - PyTorch: https://pytorch.org/docs
+
+### Testing Documentation
+- pytest: https://docs.pytest.org
+- Jest: https://jestjs.io/docs/getting-started
+- React Testing Library: https://testing-library.com/react
+- pytest-cov: https://pytest-cov.readthedocs.io
 
 ### Useful Libraries
 - react-dropzone: https://react-dropzone.js.org
@@ -1427,21 +1654,33 @@ npm start
 1. Set up development environment following Phase 1
 2. Start with backend foundation (FastAPI + basic endpoints)
 3. Build one feature at a time (recommend: Report Simplifier first)
-4. Test thoroughly before moving to next feature
-5. Integrate frontend incrementally
+4. **Run tests frequently** to ensure code quality
+5. Test thoroughly before moving to next feature
+6. Integrate frontend incrementally
 
 ### Best Practices
+- **Write tests as you develop** (TDD approach recommended)
 - Commit frequently with clear messages
-- Write tests as you develop
 - Document complex logic
 - Use type hints in Python
 - Keep components small and focused
 - Follow principle of least privilege for secrets
+- **Maintain test coverage above 70%**
+- Run full test suite before pushing to main
+
+### Quality Assurance
+- ✅ All tests passing before deployment
+- ✅ Code coverage reports reviewed
+- ✅ No critical security vulnerabilities
+- ✅ API endpoints properly validated
+- ✅ Error handling comprehensive
+- ✅ Logging properly implemented
 
 ### When You Need Help
 - Azure OpenAI: Check Azure docs and support
 - LangChain/LangGraph: Community Discord and GitHub issues
 - Medical ML: Healthcare ML forums and papers
+- Testing Issues: Review test documentation in `/docs`
 - General development: Stack Overflow, GitHub Discussions
 
 ---

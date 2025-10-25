@@ -92,7 +92,7 @@ def verify_token(token: str, token_type: str = "access") -> TokenData:
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.JWTError:
+    except (jwt.PyJWTError, jwt.DecodeError, Exception):
         raise credentials_exception
 
 

@@ -192,10 +192,13 @@ async def startup_event():
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"Allowed origins: {settings.cors_origins}")
     
-    # Create database tables
-    logger.info("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully")
+    # Create database tables (skip during testing)
+    if os.getenv("TESTING") != "true":
+        logger.info("Creating database tables...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+    else:
+        logger.info("Testing mode: Skipping database table creation")
 
 
 @app.on_event("shutdown")

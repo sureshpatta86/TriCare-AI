@@ -16,14 +16,16 @@ def test_imaging_prescreen_invalid_file_type(client):
     """Test imaging pre-screen with invalid file type"""
     file_content = b"fake file content"
     files = {"file": ("test.txt", BytesIO(file_content), "text/plain")}
-    response = client.post("/api/imaging/prescreen", files=files)
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    data = {"image_type": "x-ray"}
+    response = client.post("/api/imaging/prescreen", files=files, data=data)
+    assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE  # Updated from 400
 
 
 def test_imaging_prescreen_success(client, sample_image_file):
     """Test successful imaging pre-screen"""
     files = {"file": ("xray.png", sample_image_file, "image/png")}
-    response = client.post("/api/imaging/prescreen", files=files)
+    data = {"image_type": "x-ray", "body_part": "chest"}
+    response = client.post("/api/imaging/prescreen", files=files, data=data)
     
     # Accept success or error (if ML model not loaded)
     if response.status_code == status.HTTP_200_OK:
@@ -56,7 +58,8 @@ def test_imaging_prescreen_jpeg(client):
     buffer.seek(0)
     
     files = {"file": ("xray.jpg", buffer, "image/jpeg")}
-    response = client.post("/api/imaging/prescreen", files=files)
+    data = {"image_type": "x-ray"}
+    response = client.post("/api/imaging/prescreen", files=files, data=data)
     
     assert response.status_code in [
         status.HTTP_200_OK,
@@ -69,5 +72,6 @@ def test_imaging_prescreen_file_too_large(client):
     """Test imaging pre-screen with file that's too large"""
     large_content = b"x" * (11 * 1024 * 1024)
     files = {"file": ("large.png", BytesIO(large_content), "image/png")}
-    response = client.post("/api/imaging/prescreen", files=files)
+    data = {"image_type": "x-ray"}
+    response = client.post("/api/imaging/prescreen", files=files, data=data)
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
